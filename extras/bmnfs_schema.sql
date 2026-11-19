@@ -14,7 +14,7 @@
 -- O login liga o usuário do ERP ao prestador pelo CNPJ da empresa.
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS nfs_empresas (
-  id                  INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  id                  BIGINT UNSIGNED NOT NULL COMMENT 'sys_empresas.id: extensão fiscal 1:1',
   cnpj                VARCHAR(14)  NOT NULL,
   inscricao_municipal VARCHAR(15)  NULL,
   razao_social        VARCHAR(150) NOT NULL,
@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS nfs_empresas (
   criado_em           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   atualizado_em       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_nfs_empresas_cnpj (cnpj)
+  UNIQUE KEY uq_nfs_empresas_cnpj (cnpj),
+  CONSTRAINT fk_nfs_empresas_sys FOREIGN KEY (id) REFERENCES sys_empresas (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------
@@ -48,11 +49,11 @@ CREATE TABLE IF NOT EXISTS nfs_empresas (
 -- BMNFe: as opções mudam com frequência e não pedem migração.
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS nfs_config (
-  empresa_id    INT UNSIGNED NOT NULL,
+  empresa_id    BIGINT UNSIGNED NOT NULL,
   dados         JSON         NOT NULL,
   atualizado_em DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (empresa_id),
-  CONSTRAINT fk_nfs_config_empresa FOREIGN KEY (empresa_id) REFERENCES nfs_empresas (id)
+  CONSTRAINT fk_nfs_config_empresa FOREIGN KEY (empresa_id) REFERENCES sys_empresas (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------
@@ -60,7 +61,7 @@ CREATE TABLE IF NOT EXISTS nfs_config (
 -- do BMNFe (nfe_certificados) da empresa com o mesmo CNPJ.
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS nfs_certificados (
-  empresa_id     INT UNSIGNED NOT NULL,
+  empresa_id     BIGINT UNSIGNED NOT NULL,
   nome_arquivo   VARCHAR(160) NOT NULL,
   arquivo        LONGBLOB     NOT NULL,
   senha          VARCHAR(255) NOT NULL,
@@ -72,7 +73,7 @@ CREATE TABLE IF NOT EXISTS nfs_certificados (
   valido_ate     DATETIME     NULL,
   atualizado_em  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (empresa_id),
-  CONSTRAINT fk_nfs_certificados_empresa FOREIGN KEY (empresa_id) REFERENCES nfs_empresas (id)
+  CONSTRAINT fk_nfs_certificados_empresa FOREIGN KEY (empresa_id) REFERENCES sys_empresas (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------
@@ -80,13 +81,13 @@ CREATE TABLE IF NOT EXISTS nfs_certificados (
 -- atômico (LAST_INSERT_ID), sem número repetido entre chamadas simultâneas.
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS nfs_numeracao (
-  empresa_id    INT UNSIGNED NOT NULL,
+  empresa_id    BIGINT UNSIGNED NOT NULL,
   serie         INT          NOT NULL,
   ambiente      TINYINT      NOT NULL,
   ultimo_numero BIGINT       NOT NULL,
   atualizado_em DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (empresa_id, serie, ambiente),
-  CONSTRAINT fk_nfs_numeracao_empresa FOREIGN KEY (empresa_id) REFERENCES nfs_empresas (id)
+  CONSTRAINT fk_nfs_numeracao_empresa FOREIGN KEY (empresa_id) REFERENCES sys_empresas (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------
@@ -94,7 +95,9 @@ CREATE TABLE IF NOT EXISTS nfs_numeracao (
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS nfs_notas (
   id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  empresa_id      INT UNSIGNED  NOT NULL,
+  empresa_id      BIGINT UNSIGNED  NOT NULL,
+  -- referência do módulo de origem (POST /api/emitir, ex.: VENDA-123); nula nas notas da tela
+  referencia      VARCHAR(80)   NULL,
   ambiente        TINYINT       NOT NULL,
   serie           INT           NOT NULL,
   numero_dps      BIGINT        NOT NULL,
@@ -124,9 +127,10 @@ CREATE TABLE IF NOT EXISTS nfs_notas (
   atualizado_em   DATETIME      NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uq_nfs_notas_dps (empresa_id, ambiente, serie, numero_dps),
+  UNIQUE KEY uq_nfs_notas_referencia (empresa_id, referencia),
   KEY ix_nfs_notas_chave (empresa_id, chave),
   KEY ix_nfs_notas_emissao (empresa_id, data_emissao),
-  CONSTRAINT fk_nfs_notas_empresa FOREIGN KEY (empresa_id) REFERENCES nfs_empresas (id)
+  CONSTRAINT fk_nfs_notas_empresa FOREIGN KEY (empresa_id) REFERENCES sys_empresas (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------
@@ -134,7 +138,7 @@ CREATE TABLE IF NOT EXISTS nfs_notas (
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS nfs_eventos (
   id             BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  empresa_id     INT UNSIGNED NOT NULL,
+  empresa_id     BIGINT UNSIGNED NOT NULL,
   nota_id        BIGINT UNSIGNED NOT NULL,
   chave          VARCHAR(50)  NOT NULL,
   -- e101101 = cancelamento
@@ -148,7 +152,7 @@ CREATE TABLE IF NOT EXISTS nfs_eventos (
   criado_em      DATETIME     NOT NULL,
   PRIMARY KEY (id),
   KEY ix_nfs_eventos_nota (empresa_id, nota_id),
-  CONSTRAINT fk_nfs_eventos_empresa FOREIGN KEY (empresa_id) REFERENCES nfs_empresas (id),
+  CONSTRAINT fk_nfs_eventos_empresa FOREIGN KEY (empresa_id) REFERENCES sys_empresas (id),
   CONSTRAINT fk_nfs_eventos_nota FOREIGN KEY (nota_id) REFERENCES nfs_notas (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -157,7 +161,7 @@ CREATE TABLE IF NOT EXISTS nfs_eventos (
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS nfs_log (
   id             BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  empresa_id     INT UNSIGNED NOT NULL,
+  empresa_id     BIGINT UNSIGNED NOT NULL,
   operacao       VARCHAR(40)  NOT NULL,
   url            VARCHAR(255) NULL,
   chave          VARCHAR(50)  NULL,

@@ -90,8 +90,43 @@ async function gravarAutorizada(notaId: number, xmlNfse: string, chaveResposta: 
 // Emissão
 // ---------------------------------------------------------------------------
 
-/** Grava a nota assinada, sem enviar: o número da DPS já fica reservado no ambiente da configuração */
-export async function gravar(empresaId: number, dados: DadosNFSe) {
+/** Colunas de resumo da nota (grade e busca), tiradas dos dados do formulário */
+function resumo(dados: DadosNFSe) {
+  const t = dados.tomador;
+  return {
+    tomador_documento: t?.nome ? String(t.documento).replace(/\D/g, '') : null,
+    tomador_nome: t?.nome || null,
+    competencia: dados.competencia,
+    codigo_servico: String(dados.codigoServico).replace(/\D/g, ''),
+    valor_servico: Number(dados.valorServico),
+    aliquota_iss: Number(dados.aliquotaIss || 0),
+    iss_retido: dados.issRetido ? 1 : 0,
+    dados: JSON.stringify(dados),
+  };
+}
+
+/**
+ * Troca os dados de uma nota que ainda não virou NFS-e (assinada ou rejeitada) e a
+ * deixa pronta para transmitir de novo, com a mesma série e o mesmo número de DPS.
+ */
+export async function regravar(empresaId: number, notaId: number, dados: DadosNFSe) {
+  const erro = conferirDados(dados);
+  if (erro) throw new Error(erro);
+  const campos = resumo(dados);
+  const nomes = Object.keys(campos) as (keyof typeof campos)[];
+  const [r] = await pool.query<any>(
+    `UPDATE nfs_notas SET ${nomes.map((n) => `${n} = ?`).join(', ')}, situacao = 'assinada', atualizado_em = ?
+      WHERE id = ? AND empresa_id = ? AND situacao IN ('assinada', 'rejeitada')`,
+    [...nomes.map((n) => campos[n]), dataHoraMysql(), notaId, empresaId],
+  );
+  if (!r.affectedRows) throw new Error('Só uma nota assinada ou rejeitada pode ser gravada de novo.');
+}
+
+/**
+ * Grava a nota assinada, sem enviar: o número da DPS já fica reservado no ambiente da configuração.
+ * `referencia` é a do módulo de origem (POST /api/emitir); a tela não manda.
+ */
+export async function gravar(empresaId: number, dados: DadosNFSe, referencia?: string) {
   const ctx = await montarContexto(empresaId);
   const erro = conferirDados(dados);
   if (erro) throw new Error(erro);
@@ -107,20 +142,17 @@ export async function gravar(empresaId: number, dados: DadosNFSe) {
   const numero = await reservarNumero(empresaId, serie, ambiente);
   const dps = montarDps(ctx, serie, numero, dados);
   const xmlDps = assinar(dps.xml, 'infDPS', dps.id, ctx.certificado);
-  const t = dados.tomador;
 
+  // A coluna referencia só entra quando há referência: banco sem ela continua gravando pela tela
+  const campos: Record<string, unknown> = {
+    empresa_id: empresaId, ...(referencia && { referencia }), ambiente, serie, numero_dps: numero, id_dps: dps.id,
+    situacao: 'assinada', data_emissao: dataHoraMysql(dps.dataEmissao), ...resumo(dados), xml_dps: xmlDps,
+    criado_em: dataHoraMysql(),
+  };
+  const nomes = Object.keys(campos);
   const [ins] = await pool.query<any>(
-    `INSERT INTO nfs_notas
-       (empresa_id, ambiente, serie, numero_dps, id_dps, situacao, data_emissao, competencia,
-        tomador_documento, tomador_nome, codigo_servico, valor_servico, aliquota_iss, iss_retido,
-        dados, xml_dps, criado_em)
-     VALUES (?, ?, ?, ?, ?, 'assinada', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      empresaId, ambiente, serie, numero, dps.id, dataHoraMysql(dps.dataEmissao), dados.competencia,
-      t?.nome ? String(t.documento).replace(/\D/g, '') : null, t?.nome || null,
-      String(dados.codigoServico).replace(/\D/g, ''), Number(dados.valorServico), Number(dados.aliquotaIss || 0), dados.issRetido ? 1 : 0,
-      JSON.stringify(dados), xmlDps, dataHoraMysql(),
-    ],
+    `INSERT INTO nfs_notas (${nomes.join(', ')}) VALUES (${nomes.map(() => '?').join(', ')})`,
+    nomes.map((n) => campos[n]),
   );
   return buscarNota(empresaId, Number(ins.insertId));
 }
@@ -192,7 +224,11 @@ export async function consultar(empresaId: number, notaId: number) {
     const pelaDps = await sefin.consultarDps(ctx, nota.id_dps);
     await logar(ctx, 'Consultar DPS', pelaDps);
     if (!pelaDps.retorno.ok) {
-      throw new Error(`A Sefin Nacional não encontrou NFS-e para esta DPS.\n${sefin.descreverMensagens(pelaDps.retorno.erros)}`);
+      // naoConsta: a DPS nunca chegou à Sefin (404), então pode ser enviada de novo
+      throw Object.assign(
+        new Error(`A Sefin Nacional não encontrou NFS-e para esta DPS.\n${sefin.descreverMensagens(pelaDps.retorno.erros)}`),
+        { naoConsta: pelaDps.retorno.status === 404 },
+      );
     }
     chave = String(pelaDps.retorno.json?.chaveAcesso || '');
     if (!chave) throw new Error('A consulta da DPS não devolveu a chave da NFS-e.');

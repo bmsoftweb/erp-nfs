@@ -12,6 +12,7 @@ import type { Contexto, Prestador } from './contexto.js';
 import { gerarDanfse } from './danfse.js';
 import { conferirDados, DadosNFSe, idDps, montarCancelamento, montarDps } from './dps.js';
 import { compactar, descompactar } from './sefin.js';
+import { decidir, validarReferencia } from './concentrador.js';
 import { descreverErros, validarDps, validarPedidoEvento } from './validacao.js';
 
 function certificadoDeTeste(): CertificadoCarregado {
@@ -131,6 +132,17 @@ async function main() {
     assert.equal(pdf.toString('latin1').match(/\/Type \/Page\b/g)?.length, 1, 'DANFSe em uma página só');
   }
   await assert.rejects(gerarDanfse('<NFSe/>'), /não contém uma NFS-e/);
+
+  // Concentrador: referência repetida nunca leva a uma segunda NFS-e
+  assert.equal(decidir(undefined), 'nova');
+  assert.equal(decidir('assinada'), 'gerar');
+  assert.equal(decidir('rejeitada'), 'gerar');
+  assert.equal(decidir('pendente'), 'verificar', 'pendente pergunta à Sefin antes de reenviar');
+  assert.equal(decidir('autorizada'), 'devolver');
+  assert.equal(decidir('cancelada'), 'usada');
+  assert.equal(validarReferencia(' VENDA-123 '), 'VENDA-123');
+  assert.throws(() => validarReferencia(''), /referência/);
+  assert.throws(() => validarReferencia('x'.repeat(81)), /referência/);
 
   if (process.argv.includes('--mostrar')) console.log(montarDps(ctx(2), 1, 21, completa).xml.replace(/></g, '>\n<'));
   console.log('Autoteste da DPS: ok');
