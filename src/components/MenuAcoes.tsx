@@ -118,5 +118,8 @@ export const MenuAcoes: React.FC<{ children: React.ReactNode }> = ({ children })
 /** Linha divisória entre grupos de itens do menu (fora do menu não aparece) */
 export const SeparadorAcoes: React.FC = () => (useContext(EmMenu) ? <div className="my-1 border-t border-stone-100 dark:border-stone-800" /> : null);
 
+/** Espaço do tamanho de um ícone, para a ação que não vale na linha (mantém as posições); no menu não aparece */
+export const Vazio: React.FC = () => (useContext(EmMenu) ? null : <span className="inline-block shrink-0 w-[22px] h-[22px]" />);
+
 /** Se está dentro do menu "..." (para ações que mudam de forma no menu) */
 export const useEmMenu = () => useContext(EmMenu);

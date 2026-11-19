@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Inbox, Loader2, Menu, Search, X,
+  ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, EyeOff, Inbox, Loader2, Menu, Search, X,
 } from 'lucide-react';
+import { MenuAcoes } from './MenuAcoes';
 import { ConsultaGrade, PaginaGrade } from '../services/api';
 import { LinhasGrade, ModoLargura, lerConfigLista, salvarConfigLista } from '../utils/configListas';
 import { INPUT_CLASS } from '../utils/formStyles';
@@ -41,9 +42,11 @@ interface GradeProps<T> {
   carregarPagina: (consulta: ConsultaGrade) => Promise<PaginaGrade<T>>;
   chave: (linha: T) => string | number;
   ordemPadrao: { campo: string; direcao: 'asc' | 'desc' };
-  /** Botões de cada linha, na coluna Ações fixa à direita (ícones com title) */
+  /** Itens (BotaoAcao) de cada linha, na coluna Ações fixa à direita; mais de 4 → acoesEmMenu */
   acoes?: (linha: T) => React.ReactNode;
-  /** Largura da coluna Ações em px; o padrão do b2b é 96 (w-24) */
+  /** true quando há mais de 4 ações: a lista abre com o menu "..." (o olho do cabeçalho alterna) */
+  acoesEmMenu?: boolean;
+  /** Largura da coluna Ações em px (com o menu, ou mínima com os ícones soltos): 120 cabe 4 ícones */
   larguraAcoes?: number;
   /** Botões da barra de ferramentas, depois da busca e do "N por página" */
   botoes?: React.ReactNode;
@@ -77,7 +80,8 @@ export function Grade<T>({
   chave,
   ordemPadrao,
   acoes,
-  larguraAcoes = 96,
+  acoesEmMenu,
+  larguraAcoes = 120,
   botoes,
   selecionada,
   onSelecionar,
@@ -111,6 +115,13 @@ export function Grade<T>({
   const [grade, setGrade] = useState<LinhasGrade>('horizontais');
   const [comSobra, setComSobra] = useState(true);
   const [modoLargura, setModoLargura] = useState<ModoLargura>('manual');
+  /**
+   * O olho do cabeçalho alterna o menu "..." e os ícones soltos. Sem escolha gravada vale a regra
+   * (até 4 ações soltas, mais no menu); a escolha vai para o config_listas no "Salvar Configuração".
+   */
+  const [escolhaAcoes, setEscolhaAcoes] = useState<boolean | undefined>(undefined);
+  const acoesAbertas = !acoesEmMenu || (escolhaAcoes ?? false);
+  const emMenu = !acoesAbertas;
   const arrastando = useRef<string | null>(null);
   const tabelaRef = useRef<HTMLTableElement>(null);
 
@@ -136,6 +147,7 @@ export function Grade<T>({
       setGrade(cfg.grade || 'horizontais');
       setComSobra(cfg.sobra !== false);
       setModoLargura(cfg.modo || 'manual');
+      setEscolhaAcoes(cfg.acoesAbertas);
     });
     return () => {
       vivo = false;
@@ -317,6 +329,7 @@ export function Grade<T>({
         grade,
         sobra: comSobra,
         modo: modoLargura,
+        acoesAbertas: escolhaAcoes,
       });
       setMensagem({ texto: 'Configuração salva.' });
     } catch (err: any) {
@@ -330,7 +343,8 @@ export function Grade<T>({
   // ------------------------------------------------------------------
   const primeiro = (pagina - 1) * porPagina + 1;
   const ultimo = Math.min(pagina * porPagina, total);
-  const estiloAcoes = { width: larguraAcoes, minWidth: larguraAcoes, maxWidth: larguraAcoes };
+  // Ícones soltos: a coluna cresce até caber todos; com o menu fica na largura fixa
+  const estiloAcoes = emMenu ? { width: larguraAcoes, minWidth: larguraAcoes, maxWidth: larguraAcoes } : { minWidth: larguraAcoes };
 
   /**
    * Com a tabela presa em 100%, alargar uma coluna quando não há mais sobra não tem
@@ -554,12 +568,20 @@ export function Grade<T>({
               {/* Coluna de sobra: fica com o espaço livre, para o redimensionar funcionar com poucas colunas */}
               {mostrarSobra && <th className="w-full border-b border-stone-200 dark:border-stone-800" />}
 
-              {acoes && (
+              {acoesEmMenu && acoes && (
                 <th
                   style={estiloAcoes}
-                  className="sticky right-0 z-20 px-3 py-2.5 text-center font-semibold text-stone-600 dark:text-stone-300 border-b border-l border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-950"
+                  className="sticky right-0 z-20 px-3 py-2.5 text-center font-semibold text-stone-600 dark:text-stone-300 whitespace-nowrap border-b border-l border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-950"
                 >
                   Ações
+                  <button
+                    type="button"
+                    onClick={() => setEscolhaAcoes(!acoesAbertas)}
+                    title={acoesAbertas ? 'Voltar as ações para o menu' : 'Mostrar todas as ações na coluna'}
+                    className="ml-1.5 p-0.5 rounded align-middle text-stone-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-950/40 cursor-pointer"
+                  >
+                    {acoesAbertas ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
                 </th>
               )}
             </tr>
@@ -633,7 +655,7 @@ export function Grade<T>({
                       onClick={(e) => e.stopPropagation()}
                       onDoubleClick={(e) => e.stopPropagation()}
                     >
-                      <div className="inline-flex items-center gap-1">{acoes(linha)}</div>
+                      <div className="inline-flex items-center gap-1">{emMenu ? <MenuAcoes>{acoes(linha)}</MenuAcoes> : acoes(linha)}</div>
                     </td>
                   )}
                 </tr>

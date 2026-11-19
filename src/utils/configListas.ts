@@ -18,6 +18,8 @@ export interface ConfigLista {
   /** false depois de 'Ajustar largura': as colunas ocupam tudo, sem a coluna vazia do fim */
   sobra?: boolean;
   modo?: ModoLargura;
+  /** Olho da coluna Ações: true = ícones soltos, false = menu "..."; ausente = regra pelo número de ações */
+  acoesAbertas?: boolean;
 }
 
 let cache: Record<string, ConfigLista> | null = null;

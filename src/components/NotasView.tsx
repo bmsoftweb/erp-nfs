@@ -3,7 +3,7 @@ import { Ban, Copy, ExternalLink, Eye, FileCode2, FileText, Plus, Printer, Refre
 import * as api from '../services/api';
 import { DadosNFSe, NotaDetalhe, NotaLista } from '../types';
 import { ColunaGrade, Grade } from './Grade';
-import { BotaoAcao, MenuAcoes, SeparadorAcoes } from './MenuAcoes';
+import { BotaoAcao, SeparadorAcoes, Vazio } from './MenuAcoes';
 import { NovaNFSeView } from './NovaNFSeView';
 import { Area, Botao, Confirmacao, Etiqueta, Secao, Selecao } from './ui';
 import { AvisoErro, AvisoSucesso } from './AvisoErro';
@@ -130,10 +130,12 @@ export const NotasView: React.FC<{ onMudou: () => void }> = ({ onMudou }) => {
     [],
   );
 
+  // Posições fixas: a ação que não vale vira Vazio (some no menu). Transmitir (assinada) e
+  // Consultar (pendente/autorizada) nunca aparecem juntas e dividem a mesma posição.
   const acoes = (n: NotaLista) => (
-    <MenuAcoes>
+    <>
       <BotaoAcao icone={Eye} titulo="Abrir" descricao="Detalhes da nota" onClick={() => abrirNota(n)} />
-      {n.chave && (
+      {n.chave ? (
         <BotaoAcao
           icone={Printer}
           titulo="DANFSe"
@@ -141,22 +143,27 @@ export const NotasView: React.FC<{ onMudou: () => void }> = ({ onMudou }) => {
           carregando={ocupado === `danfse-${n.id}`}
           onClick={() => abrirDanfse(n.id)}
         />
+      ) : (
+        <Vazio />
       )}
       <BotaoAcao icone={FileCode2} titulo="Baixar XML" descricao="XML da NFS-e ou da DPS" onClick={() => executar(`xml-${n.id}`, () => api.baixarXml(n.id))} />
-      {n.situacao === 'assinada' && (
+      {n.situacao === 'assinada' ? (
         <BotaoAcao icone={Send} titulo="Transmitir" descricao="Enviar a DPS gravada à Sefin Nacional" carregando={ocupado === `transmitir-${n.id}`} onClick={() => setTransmitindo(n)} />
-      )}
-      {consultavel(n.situacao) && (
+      ) : consultavel(n.situacao) ? (
         <BotaoAcao icone={RefreshCw} titulo="Consultar" descricao="Situação na Sefin Nacional" carregando={ocupado === `consultar-${n.id}`} onClick={() => consultar(n)} />
+      ) : (
+        <Vazio />
       )}
       <BotaoAcao icone={Copy} titulo="Copiar" descricao="Nova NFS-e com os mesmos dados" onClick={() => copiar(n)} />
-      {n.situacao === 'autorizada' && (
+      {n.situacao === 'autorizada' ? (
         <>
           <SeparadorAcoes />
           <BotaoAcao icone={Ban} titulo="Cancelar NFS-e" descricao="Evento de cancelamento" tom="perigo" onClick={() => setCancelando(n)} />
         </>
+      ) : (
+        <Vazio />
       )}
-    </MenuAcoes>
+    </>
   );
 
   return (
@@ -247,7 +254,7 @@ export const NotasView: React.FC<{ onMudou: () => void }> = ({ onMudou }) => {
           chave={(n) => n.id}
           ordemPadrao={{ campo: 'data_emissao', direcao: 'desc' }}
           acoes={acoes}
-          larguraAcoes={56}
+          acoesEmMenu
           botoes={
             <Botao variante="primario" icone={<Plus className="w-3.5 h-3.5" />} onClick={() => novaNota()}>
               Nova NFS-e
