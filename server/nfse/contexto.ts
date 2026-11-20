@@ -37,53 +37,27 @@ export interface Contexto {
   certificado: CertificadoCarregado;
 }
 
-/** De onde veio o certificado: do próprio BMNFs ou do BMNFe (mesmo CNPJ) */
-export type OrigemCertificado = 'bmnfs' | 'bmnfe';
+/** Cache pela data de atualização: um certificado novo gravado no BM-Master vale na próxima operação */
+const cacheCertificado = new Map<number, { atualizadoEm: string; cert: CertificadoCarregado }>();
 
-const cacheCertificado = new Map<string, { atualizadoEm: string; cert: CertificadoCarregado }>();
-
-export function esquecerCertificado(empresaId: number) {
-  for (const chave of [...cacheCertificado.keys()]) {
-    if (chave.endsWith(`:${empresaId}`)) cacheCertificado.delete(chave);
-  }
-}
-
-/**
- * Linha do certificado: o do BMNFs ou, sem ele, o do BMNFe da empresa com o mesmo
- * CNPJ, para não precisar cadastrar o mesmo .pfx duas vezes.
- */
-export async function linhaCertificado(empresaId: number): Promise<{ linha: any; origem: OrigemCertificado } | null> {
-  const [proprio] = await pool.query<any[]>('SELECT * FROM nfs_certificados WHERE empresa_id = ? LIMIT 1', [empresaId]);
-  if (proprio.length) return { linha: proprio[0], origem: 'bmnfs' };
-
-  try {
-    const [doBmnfe] = await pool.query<any[]>(
-      `SELECT c.* FROM nfe_certificados c
-         JOIN nfe_empresas e ON e.id = c.empresa_id
-         JOIN nfs_empresas s ON s.cnpj = e.cnpj COLLATE utf8mb4_unicode_ci
-        WHERE s.id = ? LIMIT 1`,
-      [empresaId],
-    );
-    if (doBmnfe.length) return { linha: doBmnfe[0], origem: 'bmnfe' };
-  } catch {
-    // Banco sem o BMNFe: só vale o certificado do próprio BMNFs
-  }
-  return null;
+/** Linha do certificado da empresa (sys_empresas_certificados, o mesmo da NF-e; gravado só no BM-Master) */
+export async function linhaCertificado(empresaId: number): Promise<any | null> {
+  const [linhas] = await pool.query<any[]>('SELECT * FROM sys_empresas_certificados WHERE empresa_id = ? LIMIT 1', [empresaId]);
+  return linhas[0] ?? null;
 }
 
 export async function carregarCertificado(empresaId: number): Promise<CertificadoCarregado> {
-  const achado = await linhaCertificado(empresaId);
-  if (!achado) {
-    throw new Error('Nenhum certificado digital cadastrado. Envie o arquivo .pfx em Configurações › Certificado.');
+  const linha = await linhaCertificado(empresaId);
+  if (!linha) {
+    throw new Error('Nenhum certificado digital cadastrado. Grave o arquivo .pfx no BM-Master (Grupos › Empresas › Configurações).');
   }
 
-  const { arquivo, senha, atualizado_em } = achado.linha;
-  const chave = `${achado.origem}:${empresaId}`;
-  const emCache = cacheCertificado.get(chave);
+  const { arquivo, senha, atualizado_em } = linha;
+  const emCache = cacheCertificado.get(empresaId);
   if (emCache && emCache.atualizadoEm === String(atualizado_em)) return emCache.cert;
 
   const cert = carregarPfx(Buffer.from(arquivo), senha);
-  cacheCertificado.set(chave, { atualizadoEm: String(atualizado_em), cert });
+  cacheCertificado.set(empresaId, { atualizadoEm: String(atualizado_em), cert });
   return cert;
 }
 

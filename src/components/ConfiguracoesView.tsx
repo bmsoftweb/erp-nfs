@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Building2, FileCog, Globe2, Save, ShieldCheck, Trash2, Upload } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Building2, FileCog, Globe2, Save, ShieldCheck } from 'lucide-react';
 import * as api from '../services/api';
 import { CertificadoInfo, ConfigNFSe, Prestador } from '../types';
-import { Abas, Area, Botao, Campo, Confirmacao, Secao, Selecao, Texto } from './ui';
+import { Abas, Area, Botao, Campo, Secao, Selecao, Texto } from './ui';
 import { AvisoErro, AvisoSucesso } from './AvisoErro';
 import { NumberField } from './NumberField';
 import { CampoCodigo, useCodigosServico } from './CampoCodigo';
@@ -19,11 +19,6 @@ export const ConfiguracoesView: React.FC<{ onSalvou: () => void }> = ({ onSalvou
   const [aviso, setAviso] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const [removendoCert, setRemovendoCert] = useState(false);
-
-  const [senhaCertificado, setSenhaCertificado] = useState('');
-  const [arquivoCertificado, setArquivoCertificado] = useState<File | null>(null);
-  const arquivoRef = useRef<HTMLInputElement>(null);
   const codigos = useCodigosServico(config?.emissao.codigoServico ?? '');
 
   const recarregar = async () => {
@@ -65,38 +60,6 @@ export const ConfiguracoesView: React.FC<{ onSalvou: () => void }> = ({ onSalvou
     }
   };
 
-  const enviarCertificado = async () => {
-    if (!arquivoCertificado) return;
-    setErro(null);
-    try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const leitor = new FileReader();
-        leitor.onload = () => resolve(String(leitor.result).split(',')[1]);
-        leitor.onerror = () => reject(new Error('Não foi possível ler o arquivo.'));
-        leitor.readAsDataURL(arquivoCertificado);
-      });
-      await api.enviarCertificado(base64, arquivoCertificado.name, senhaCertificado);
-      setAviso('Certificado cadastrado.');
-      setArquivoCertificado(null);
-      setSenhaCertificado('');
-      recarregar();
-      onSalvou();
-    } catch (err: any) {
-      setErro(err.message);
-    }
-  };
-
-  const removerCertificado = async () => {
-    setRemovendoCert(false);
-    try {
-      await api.removerCertificado();
-      recarregar();
-      onSalvou();
-    } catch (err: any) {
-      setErro(err.message);
-    }
-  };
-
   if (!config || !prestador) {
     return (
       <>
@@ -105,8 +68,6 @@ export const ConfiguracoesView: React.FC<{ onSalvou: () => void }> = ({ onSalvou
       </>
     );
   }
-
-  const doBmnfe = certificado?.origem === 'bmnfe';
 
   return (
     <div className="flex flex-col">
@@ -155,55 +116,18 @@ export const ConfiguracoesView: React.FC<{ onSalvou: () => void }> = ({ onSalvou
                 >
                   {certificado.vencido ? 'Vencido' : `Vence em ${certificado.diasParaVencer} dia(s)`}
                 </span>
-                {doBmnfe ? (
-                  <span className="text-[11px] text-stone-500 dark:text-stone-400">
-                    Usando o certificado cadastrado no BMNFe para este CNPJ. Enviar um arquivo aqui passa a valer só para o BMNFs.
-                  </span>
-                ) : (
-                  <Botao variante="perigo" icone={<Trash2 className="w-3.5 h-3.5" />} onClick={() => setRemovendoCert(true)}>
-                    Remover certificado
-                  </Botao>
-                )}
               </div>
             </div>
           ) : (
             <p className="text-xs text-stone-500 dark:text-stone-400 mb-4">
-              Nenhum certificado: nem aqui nem no BMNFe para este CNPJ. Sem ele nenhuma operação com a Sefin Nacional funciona.
+              Nenhum certificado cadastrado para a empresa. Sem ele nenhuma operação com a Sefin Nacional funciona.
             </p>
           )}
 
-          <div className="border-t border-stone-200 dark:border-stone-800 pt-4 grid grid-cols-1 lg:grid-cols-12 gap-3">
-            <input
-              ref={arquivoRef}
-              type="file"
-              accept=".pfx,.p12"
-              className="hidden"
-              onChange={(e) => setArquivoCertificado(e.target.files?.[0] || null)}
-            />
-            <Campo rotulo="Arquivo do certificado" className="lg:col-span-5">
-              <div className="flex gap-2">
-                <div className="flex-1 min-w-0 h-[34px] flex items-center px-3 bg-stone-50 dark:bg-stone-800/80 text-xs truncate border-l-2 border-amber-500">
-                  {arquivoCertificado?.name || 'Nenhum arquivo escolhido'}
-                </div>
-                <Botao icone={<Upload className="w-3.5 h-3.5" />} onClick={() => arquivoRef.current?.click()}>
-                  Escolher
-                </Botao>
-              </div>
-            </Campo>
-            <Texto
-              rotulo="Senha do certificado"
-              type="password"
-              required
-              value={senhaCertificado}
-              onChange={(e) => setSenhaCertificado(e.target.value)}
-              className="lg:col-span-4"
-            />
-            <div className="lg:col-span-3 flex items-end">
-              <Botao variante="primario" disabled={!arquivoCertificado || !senhaCertificado} onClick={enviarCertificado} className="w-full">
-                Enviar certificado
-              </Botao>
-            </div>
-          </div>
+          <p className="border-t border-stone-200 dark:border-stone-800 pt-4 text-xs text-stone-500 dark:text-stone-400">
+            O certificado é da empresa e é o mesmo da NF-e: é gravado, trocado e removido no BM-Master, em
+            Grupos › Empresas › Configurações › Certificados.
+          </p>
         </Secao>
       )}
 
@@ -394,15 +318,6 @@ export const ConfiguracoesView: React.FC<{ onSalvou: () => void }> = ({ onSalvou
           </Botao>
         </div>
       )}
-
-      <Confirmacao
-        aberto={removendoCert}
-        titulo="Remover o certificado?"
-        mensagem="O BMNFs volta a usar o certificado do BMNFe deste CNPJ, se houver. Sem nenhum, nada funciona com a Sefin Nacional."
-        rotuloConfirmar="Remover"
-        onConfirmar={removerCertificado}
-        onCancelar={() => setRemovendoCert(false)}
-      />
     </div>
   );
 };

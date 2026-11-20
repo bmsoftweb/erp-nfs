@@ -32,8 +32,8 @@ npm install
    tabelas de códigos (nacional, municipal e NBS) que a tela Tabelas baixa da fonte oficial.
 2. Copie `.env.example` para `.env` e preencha o acesso ao MySQL e o `SESSION_SECRET`.
 3. O login usa os usuários do ERP (`sys_usuarios`), ligados ao prestador pelo CNPJ.
-4. Certificado: sem um próprio em Configurações › Certificado, o BMNFs usa o do BMNFe
-   (`nfe_certificados`) da empresa com o mesmo CNPJ.
+4. Certificado: o mesmo da NF-e, em `sys_empresas_certificados`, gravado no BM-Master
+   (Grupos › Empresas › Configurações › Certificados). Aqui ele só é lido.
 
 ```bash
 npm run dev

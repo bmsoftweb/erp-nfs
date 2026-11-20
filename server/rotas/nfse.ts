@@ -5,9 +5,7 @@
 import { Request, Response, Router } from 'express';
 import { pool } from '../db.js';
 import { gravarConfig, lerConfig, preservarSegredos, semSegredos } from '../config.js';
-import { carregarPrestador, esquecerCertificado, linhaCertificado } from '../nfse/contexto.js';
-import { carregarPfx } from '../nfse/certificado.js';
-import { dataHoraMysql, paraBR } from '../nfse/datas.js';
+import { carregarPrestador, linhaCertificado } from '../nfse/contexto.js';
 import { FalhaSchema } from '../nfse/validacao.js';
 import { buscarNota, cancelar, consultar, danfse, gravar, transmitir } from '../nfse/operacoes.js';
 import { urlConsultaPublica } from '../nfse/sefin.js';
@@ -106,13 +104,13 @@ export function criarRotasNFSe(): Router {
   // =========================================================================
   r.get('/config', rota(async (req, res) => {
     const empresaId = empresaDaRequisicao(req);
-    const [config, prestador, achado] = await Promise.all([lerConfig(empresaId), carregarPrestador(empresaId), linhaCertificado(empresaId)]);
+    const [config, prestador, linha] = await Promise.all([lerConfig(empresaId), carregarPrestador(empresaId), linhaCertificado(empresaId)]);
 
     let certificado: any = null;
-    if (achado) {
-      const { arquivo: _a, senha: _s, ...c } = achado.linha;
+    if (linha) {
+      const { arquivo: _a, senha: _s, ...c } = linha;
       const dias = Math.floor((new Date(c.valido_ate).getTime() - Date.now()) / 86_400_000);
-      certificado = { ...c, origem: achado.origem, diasParaVencer: dias, vencido: dias < 0 };
+      certificado = { ...c, diasParaVencer: dias, vencido: dias < 0 };
     }
     res.json({ config: semSegredos(config), prestador, certificado });
   }));
@@ -137,40 +135,8 @@ export function criarRotasNFSe(): Router {
     res.json({ success: true, prestador: await carregarPrestador(empresaId) });
   }));
 
-  r.post('/certificado', rota(async (req, res) => {
-    const empresaId = empresaDaRequisicao(req);
-    const { arquivoBase64, nomeArquivo, senha } = req.body || {};
-    if (!arquivoBase64) throw new Error('Envie o arquivo .pfx do certificado.');
-    if (!senha) throw new Error('Informe a senha do certificado.');
-
-    const pfx = Buffer.from(String(arquivoBase64).replace(/^data:[^,]+,/, ''), 'base64');
-    // Senha errada ou arquivo inválido falham aqui, antes de gravar
-    const { info } = carregarPfx(pfx, senha);
-
-    await pool.query(
-      `INSERT INTO nfs_certificados
-         (empresa_id, nome_arquivo, arquivo, senha, cnpj, razao_social, numero_serie, emissor, valido_de, valido_ate)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE
-         nome_arquivo = VALUES(nome_arquivo), arquivo = VALUES(arquivo), senha = VALUES(senha),
-         cnpj = VALUES(cnpj), razao_social = VALUES(razao_social), numero_serie = VALUES(numero_serie),
-         emissor = VALUES(emissor), valido_de = VALUES(valido_de), valido_ate = VALUES(valido_ate)`,
-      [
-        empresaId, nomeArquivo || 'certificado.pfx', pfx, senha, info.cnpj, info.razaoSocial, info.numeroSerie, info.emissor,
-        dataHoraMysql(info.validoDe), dataHoraMysql(info.validoAte),
-      ],
-    );
-    esquecerCertificado(empresaId);
-    res.json({ success: true, certificado: { ...info, validoDe: paraBR(info.validoDe, false), validoAte: paraBR(info.validoAte, false) } });
-  }));
-
-  /** Apaga só o certificado próprio; o do BMNFe (mesmo CNPJ) volta a valer */
-  r.delete('/certificado', rota(async (req, res) => {
-    const empresaId = empresaDaRequisicao(req);
-    await pool.query('DELETE FROM nfs_certificados WHERE empresa_id = ?', [empresaId]);
-    esquecerCertificado(empresaId);
-    res.json({ success: true });
-  }));
+  // O certificado (sys_empresas_certificados) é gravado e removido só no BM-Master:
+  // Grupos › Empresas › Configurações › Certificados. Aqui ele só é lido.
 
   // =========================================================================
   // Notas

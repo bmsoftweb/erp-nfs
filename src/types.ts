@@ -60,8 +60,6 @@ export interface CertificadoInfo {
   valido_ate: string;
   diasParaVencer: number;
   vencido: boolean;
-  /** bmnfe = usando o certificado do BMNFe da empresa com o mesmo CNPJ */
-  origem: 'bmnfs' | 'bmnfe';
 }
 
 /** Um problema apontado pelo XSD */

@@ -112,10 +112,7 @@ export const gravarConfig = (config: Partial<ConfigNFSe>) =>
 export const gravarPrestador = (prestador: Partial<Prestador>) =>
   pedir<{ success: boolean; prestador: Prestador }>('/prestador', { method: 'PUT', body: JSON.stringify(prestador) });
 
-export const enviarCertificado = (arquivoBase64: string, nomeArquivo: string, senha: string) =>
-  post<{ success: boolean; certificado: any }>('/certificado', { arquivoBase64, nomeArquivo, senha });
-
-export const removerCertificado = () => pedir<{ success: boolean }>('/certificado', { method: 'DELETE' });
+// O certificado (sys_empresas_certificados) é gravado no BM-Master; aqui só vem junto de buscarConfig()
 
 // ---------------------------------------------------------------------------
 // Notas
